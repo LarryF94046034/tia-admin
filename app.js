@@ -27,6 +27,7 @@ async function refresh(){
   try{
     const result=await api('list',{kind,page});
     $('case-count').textContent=result.counts.cases;$('appeal-count').textContent=result.counts.appeals;
+    if(!result.email_configured)status('郵件提醒尚未啟用；新案件會顯示於此後台。');
     $('list-title').textContent=labels[kind];$('updated').textContent='更新於 '+new Date().toLocaleTimeString('zh-TW');$('page-number').textContent=String(page+1);$('previous').disabled=page===0;$('next').disabled=result.rows.length<50;
     $('records').replaceChildren();
     if(!result.rows.length)$('records').append(element('p','目前沒有紀錄。','muted'));
@@ -59,7 +60,22 @@ function renderCase(result){
     const actions=element('div',undefined,'actions');
     for(const action of ['dismiss','warn','mute','remove_content','ban']){const b=element('button',labels[action],['ban','remove_content'].includes(action)?'danger':'');b.onclick=()=>decide(action,c);actions.append(b);}detail.append(actions);
   }
-  for(const action of result.actions)detail.append(element('p',`${labels[action.kind]||action.kind} · ${labels[action.state]||action.state}\n${action.reason}\n${action.id}`));
+  for(const action of result.actions){
+    detail.append(element('p',`${labels[action.kind]||action.kind} · ${labels[action.state]||action.state}\n${action.reason}\n${action.id}`));
+    if(action.state==='provider_pending'){
+      const retry=element('button','重新核對處理結果');retry.onclick=async()=>{
+        if(busy)return;busy=true;
+        try{await api('decide',{request_id:action.id,case_id:c.id,kind:action.kind,reason:action.reason,hours:action.expires?Math.round((action.expires-action.created)/3600):0,confirm_target:c.target});status('已重新核對。');}catch(error){fail(error);}finally{busy=false;}
+        if(account)await openCase(c.id);
+      };detail.append(retry);
+      const cancel=element('button','取消未完成操作','danger');cancel.onclick=async()=>{
+        const answer=await confirmation('僅在已核對 PlayFab 未套用停權後使用；須距操作至少 5 分鐘。取消紀錄不會復原已移除的文字內容。',c.target,false,true);
+        if(!answer||busy)return;busy=true;
+        try{await api('cancel_pending',{action_id:action.id,reason:answer.reason,confirm_target:answer.confirm_target});status('已取消未完成操作，案件重新開啟。');}catch(error){fail(error);}finally{busy=false;}
+        if(account)await openCase(c.id);
+      };detail.append(cancel);
+    }
+  }
   for(const appeal of result.appeals)renderAppeal(detail,appeal);
 }
 function renderAppeal(parent,appeal){
@@ -91,7 +107,7 @@ async function reviewAppeal(appeal,decision){
 }
 $('signin').onclick=async()=>{
   $('signin').disabled=true;
-  try{const result=await msalApp.loginPopup({scopes:[`api://${config.clientId}/Admin.Access`],prompt:'select_account'});account=result.account;await token(true);$('identity').textContent=account.username;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;status('');await refresh();refreshTimer=setInterval(()=>{if(!document.hidden)refresh();},30000);}catch(error){fail(error);}finally{$('signin').disabled=false;}
+  try{const result=await msalApp.loginPopup({scopes:[`api://${config.clientId}/Admin.Access`],prompt:'select_account'});account=result.account;await token(true);$('identity').textContent=account.username+' · '+account.localAccountId;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;status('');await refresh();refreshTimer=setInterval(()=>{if(!document.hidden)refresh();},30000);}catch(error){fail(error);}finally{$('signin').disabled=false;}
 };
 $('signout').onclick=()=>{const previous=account;clearWorkspace();$('identity').textContent='管理員登入';msalApp.clearCache({account:previous});status('已登出，頁面中的案件資料與權杖已清除。');};
 document.querySelectorAll('[data-page]').forEach(button=>button.onclick=()=>{kind=button.dataset.page;page=0;selected='';document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('selected',b===button));$('detail').replaceChildren(element('p','請選擇一筆紀錄。','muted'));refresh();});
