@@ -21,6 +21,7 @@ export async function renderSupport(ctx){
     $('records').append(element('p','依玩家 ID 查詢；每次查閱均有稽核紀錄。'),player,search);
     search.onclick=async()=>{if(!active())return;search.disabled=true;try{const result=await api('support_lookup',{player:player.value.trim().toUpperCase()});
       if(!active())return;
+      status('已讀取玩家資料；Google Play 課金尚未接入。');
       detail(element('h2','玩家 '+result.player),element('p',result.billing.status+'；手機紀錄不能證明已付款。'),pretty(result));
       const subject=input('客服案件標題',40),body=element('textarea');body.maxLength=300;body.placeholder='問題與查核依據（不填密碼或付款權杖）';
       const create=element('button','建立客服案件');
