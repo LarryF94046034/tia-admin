@@ -1,3 +1,4 @@
+import {renderSupport} from './support.js';
 // All tokens and case data remain in page memory. Never localStorage, cookies or a public JSON export.
 const $=id=>document.getElementById(id);
 const labels={cases:'檢舉案件',appeals:'申訴管理',audit:'操作紀錄',open:'待審查',processing:'處理中',closed:'已結案',harassment:'騷擾／辱罵',sexual:'色情／兒少安全',hate:'仇恨／威脅',fraud:'詐騙／廣告',spam:'洗頻',privacy:'洩漏個資',other:'其他',message:'好友私訊',player:'玩家暱稱',guild:'公會內容',guild_mail:'公會信件',warn:'警告',mute:'禁言',ban:'停權',remove_content:'移除內容',dismiss:'檢舉不成立',active:'生效中',revoked:'已撤銷',expired:'已到期',provider_pending:'待確認外部處理結果'};
@@ -9,6 +10,7 @@ const stamp=value=>value?new Date(Number(value)*1000).toLocaleString('zh-TW'):'�
 const element=(tag,value,className)=>{const e=document.createElement(tag);if(value!==undefined)e.textContent=text(value);if(className)e.className=className;return e;};
 const status=message=>$('status').textContent=message;
 const errors={ADMIN_MFA_REQUIRED:'尚未取得多重要素驗證證明。請登出後重新進行 Microsoft MFA 登入；未驗證前不會顯示玩家資料。',ADMIN_FORBIDDEN:'此帳號沒有管理權限。',ADMIN_REAUTH_REQUIRED:'管理工作階段已到期，請重新登入。',ADMIN_AUTH_REQUIRED:'管理員驗證失敗，請重新登入。',ADMIN_NOT_CONFIGURED:'伺服器的管理員登入設定尚未完成。',COMMUNITY_CONTENT_CHANGED:'原內容已被更改，未移除新內容。請重新審查。',COMMUNITY_PROVIDER_REVIEW:'外部處理結果尚未確認，請核對 PlayFab 紀錄，勿重複建立處分。',COMMUNITY_CASE_CLOSED:'案件已結案或正在處理，請重新整理。',COMMUNITY_CONFIRM_REQUIRED:'確認玩家 ID 不符，未執行處分。'};
+Object.assign(errors,{SUPPORT_PLAYER_INVALID:'請輸入正確的 PlayFab 玩家 ID。',UNKNOWN_ACCOUNT:'伺服器帳本尚無此帳號。',SUPPORT_ALREADY_GRANTED:'本案已建立補發，請重新開啟案件核對信件。',SUPPORT_CONFIRM_REQUIRED:'玩家 ID 確認不符，未執行補發。',SUPPORT_CASE_CLOSED:'案件已結案，未執行補發。',REQUEST_CONFLICT:'重試參數與原操作不符，請重新開啟案件核對處理紀錄。'});
 
 async function token(interactive=false){
   const request={scopes:[`api://${config.clientId}/Admin.Access`],account,forceRefresh:interactive};
@@ -35,6 +37,7 @@ function clearWorkspace(){sessionGeneration++;for(const request of pendingReques
 async function refresh(){
   if(busy||!account)return;busy=true;$('refresh').disabled=true;
   try{
+    if(['support','lookup','health'].includes(kind)){await supportPage();return;}
     const result=await api('list',{kind,page});
     $('case-count').textContent=result.counts.cases;$('appeal-count').textContent=result.counts.appeals;
     if(!result.email_configured)status('郵件提醒尚未啟用；新案件會顯示於此後台。');
@@ -117,7 +120,7 @@ async function reviewAppeal(appeal,decision){
 }
 $('signin').onclick=async()=>{
   $('signin').disabled=true;status('請在 Microsoft 登入視窗完成驗證；若未出現視窗，請允許此網站開啟彈出式視窗。');
-  try{const result=await msalApp.loginPopup({scopes:[`api://${config.clientId}/Admin.Access`],prompt:'select_account'});account=result.account;await token(true);$('identity').textContent=account.username;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;status('');await refresh();refreshTimer=setInterval(()=>{if(!document.hidden)refresh();},30000);}catch(error){fail(error);}finally{$('signin').disabled=false;}
+  try{const result=await msalApp.loginPopup({scopes:[`api://${config.clientId}/Admin.Access`],prompt:'select_account'});account=result.account;await token(true);$('identity').textContent=account.username;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;status('');await refresh();refreshTimer=setInterval(()=>{if(!document.hidden&&kind!=='lookup'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))refresh();},30000);}catch(error){fail(error);}finally{$('signin').disabled=false;}
 };
 $('signout').onclick=()=>{const previous=account;clearWorkspace();$('identity').textContent='管理員登入';msalApp.clearCache({account:previous});status('已登出，頁面中的案件資料與權杖已清除。');};
 document.querySelectorAll('[data-page]').forEach(button=>button.onclick=()=>{kind=button.dataset.page;page=0;selected='';document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('selected',b===button));$('detail').replaceChildren(element('p','請選擇一筆紀錄。','muted'));refresh();});
@@ -127,3 +130,5 @@ try{
   if(!/^[a-f0-9-]{36}$/i.test(config.clientId)){$('signin').disabled=true;$('setup').textContent='管理員登入設定準備中，尚未開放讀取玩家資料。';}
   else{msalApp=new msal.PublicClientApplication({auth:{clientId:config.clientId,authority:`https://login.microsoftonline.com/${config.tenant}`,redirectUri:new URL('auth.html',location.href).href},cache:{cacheLocation:'memoryStorage'},system:{allowPlatformBroker:false,popupBridgeTimeout:180000}});await msalApp.initialize();}
 }catch{status('登入設定載入失敗，請稍後重試。');$('signin').disabled=true;}
+
+async function supportPage(){const generation=sessionGeneration,owner=account?.homeAccountId,route=kind,offset=page;await renderSupport({$,api,element,status,stamp,fail,kind,page,active:()=>generation===sessionGeneration&&owner&&account?.homeAccountId===owner&&route===kind&&offset===page});}

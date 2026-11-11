@@ -1,5 +1,7 @@
 # 無限深淵社群管理中心
 
+目前另包含客服案件、玩家 ID 查詢與系統健康。補發限 owner，經指定玩家信件領取，每案一次；Google Play 未接線，無付款驗證或現金退款按鈕。選取支援檔只在瀏覽器本機顯示摘要與雜湊，不上傳。SMTP 尚未設定時顯示待配置。
+
 此儲存庫僅發布靜態管理介面，不包含遊戲原始碼、玩家資料、PlayFab Secret 或管理員名單。
 
 登入使用 Microsoft Entra ID；管理 API 在 Azure 獨立服務驗證權杖簽章、租用戶、API audience、客戶端、scope、管理員 Object ID 與 MFA。前端按鈕不構成授權。
